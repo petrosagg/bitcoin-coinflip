@@ -1,0 +1,15 @@
+{
+  "name": "bitcoin-coinflip",
+  "version": "0.0.0",
+  "description": "Flip a coin with someone using on the Bitcoin Blockchain",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Petros Angelatos",
+  "license": "MIT",
+  "dependencies": {
+    "bitcore": "^0.1.24",
+    "coffee-script": "^1.7.1"
+  }
+}
