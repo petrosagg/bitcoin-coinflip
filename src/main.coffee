@@ -46,7 +46,6 @@ p2shScriptPub = Script.buildScriptHashOut(redeemScript)
 
 p2shAddress = p2shScriptPub.toAddress()
 
-console.log('Alice and Bob should place their bets at', p2shAddress.toString())
 
 # Assume a UTXO exists that sends 1BTC to the P2SH address calculated above.
 # When this runs in production, this UTXO will have inputs from Alice and Bob,
@@ -57,6 +56,18 @@ p2shUtxoWith1BTC = new Transaction.UnspentOutput(
 	script: p2shScriptPub
 	satoshis: 1e8
 )
+
+console.log('Alice')
+console.log('    Private Key:', aliceKeyPair.toWIF())
+console.log('          Value:', aliceValue)
+console.log('     Commitment:', aliceRandom.toString('hex'))
+console.log('Bob')
+console.log('    Private Key:', bobKeyPair.toWIF())
+console.log('          Value:', bobValue)
+console.log('     Commitment:', bobRandom.toString('hex'))
+console.log('')
+console.log('Funding address:', p2shAddress.toString())
+console.log('')
 
 # Calculate who won
 if aliceValue is bobValue
@@ -84,9 +95,8 @@ p2shScriptSig = Script()
 .add(bobRandom)
 .add(redeemScript.toBuffer())
 
-console.log('Verifying spending transaction')
 interpreter = Script.Interpreter()
 flags = Script.Interpreter.SCRIPT_VERIFY_P2SH
 verified = interpreter.verify(p2shScriptSig, p2shScriptPub, tx, 0, flags)
 
-console.log('RESULT:', verified, interpreter.errstr)
+console.log('Verifying spending transaction:', verified, interpreter.errstr)
