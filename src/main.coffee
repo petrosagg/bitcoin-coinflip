@@ -1,4 +1,4 @@
-{ Address, crypto, Script, Transaction, PrivateKey } = require 'bitcore-lib'
+{ crypto, util, Script, Transaction, PrivateKey } = require 'bitcore-lib'
 
 # Number of random bytes provided by each party
 NONCE_SIZE = 32
@@ -51,30 +51,42 @@ console.log('Alice and Bob should place their bets at', p2shAddress.toString())
 # Assume a UTXO exists that sends 1BTC to the P2SH address calculated above.
 # When this runs in production, this UTXO will have inputs from Alice and Bob,
 # which is how they place their bets.
-p2shUtxoWith1BTC =
-	address: p2shAddress.toString()
+p2shUtxoWith1BTC = new Transaction.UnspentOutput(
 	txId: 'a477af6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458'
 	outputIndex: 0
-	script: p2shScriptPub.toString()
+	script: p2shScriptPub
 	satoshis: 1e8
+)
 
-# Now let's create a transaction that tries to spend the bet by suppliing the
-# random values and Alice's signature
+# Calculate who won
+if aliceValue is bobValue
+	console.log('Alice wins')
+	winnerKeyPair = aliceKeyPair
+else
+	console.log('Bob wins')
+	winnerKeyPair = bobKeyPair
 
-p2shScriptSig = Script().add(aliceRandom).add(bobRandom).add(redeemScript.toBuffer())
+# Now let's create a transaction that tries to spend the bet
+tx = new Transaction()
+.from(p2shUtxoWith1BTC)
+.to(winnerKeyPair.toAddress(), 1e8)
 
-# XXX: bitcore doesn't support signing generic P2SH transactions. Find a manual
-# way to do it
-# tx = new Transaction()
-# .from(p2shUtxoWith1BTC)
-# .to(aliceKeyPair.toAddress(), 1e8)
-# .applySignature(
-# 	inputIndex: 0
-# 	publicKey: null
-# 	signature: null
-# )
+# Sign the transaction with Alice's private key
+sigtype = crypto.Signature.SIGHASH_ALL
+signature = Transaction.Sighash.sign(tx, winnerKeyPair, sigtype, 0, redeemScript)
+signatureBuffer = Buffer.concat([ signature.toDER(), Buffer.from([ sigtype ]) ])
 
+# Construct the sigScript containing the serialised redeemScript, the two
+# random inputs and Alice's signature
+p2shScriptSig = Script()
+.add(signatureBuffer)
+.add(aliceRandom)
+.add(bobRandom)
+.add(redeemScript.toBuffer())
+
+console.log('Verifying spending transaction')
+interpreter = Script.Interpreter()
 flags = Script.Interpreter.SCRIPT_VERIFY_P2SH
-verified = Script.Interpreter().verify(p2shScriptSig, p2shScriptPub, null, 0, flags)
+verified = interpreter.verify(p2shScriptSig, p2shScriptPub, tx, 0, flags)
 
-console.log('RESULT:', verified)
+console.log('RESULT:', verified, interpreter.errstr)
