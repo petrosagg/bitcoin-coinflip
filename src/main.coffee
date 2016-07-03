@@ -1,7 +1,7 @@
 { crypto, util, Script, Transaction, PrivateKey } = require 'bitcore-lib'
 
 # Number of random bytes provided by each party
-NONCE_SIZE = 32
+NONCE_SIZE = 16
 
 # Generate random keypairs for Alice and Bob
 aliceKeyPair = new PrivateKey()
@@ -19,20 +19,20 @@ bobRandom = crypto.Random.getRandomBuffer(NONCE_SIZE + bobValue)
 
 redeemScript = Script()
 .add('OP_2DUP')                                # Stack [A_rnd, B_rnd, A_rnd, B_rnd]
-.add('OP_SHA256')                              # Stack [A_rnd, B_rnd, A_rnd, SHA256(B_rnd)]
-.add(crypto.Hash.sha256(bobRandom))            # Stack [A_rnd, B_rnd, A_rnd, SHA256(B_rnd), SHA256(B_rnd)]
+.add('OP_HASH160')                             # Stack [A_rnd, B_rnd, A_rnd, HASH160(B_rnd)]
+.add(crypto.Hash.sha256ripemd160(bobRandom))   # Stack [A_rnd, B_rnd, A_rnd, HASH160(B_rnd), HASH160(B_rnd)]
 .add('OP_EQUALVERIFY')                         # Stack [A_rnd, B_rnd, A_rnd]
-.add('OP_SHA256')                              # Stack [A_rnd, B_rnd, SHA256(A_rnd)]
-.add(crypto.Hash.sha256(aliceRandom))          # Stack [A_rnd, B_rnd, SHA256(A_rnd), SHA256(A_rnd)]
+.add('OP_HASH160')                             # Stack [A_rnd, B_rnd, HASH160(A_rnd)]
+.add(crypto.Hash.sha256ripemd160(aliceRandom)) # Stack [A_rnd, B_rnd, HASH160(A_rnd), HASH160(A_rnd)]
 .add('OP_EQUALVERIFY')                         # Stack [A_rnd, B_rnd]
 .add('OP_SIZE')                                # Stack [A_rnd, B_rnd, SIZE(B_rnd)]
 .add('OP_NIP')                                 # Stack [A_rnd, SIZE(B_rnd)]
-.add(new Buffer([NONCE_SIZE]))                 # Stack [A_rnd, SIZE(B_rnd), NONCE_SIZE]
+.add(Buffer.from([ NONCE_SIZE ]))              # Stack [A_rnd, SIZE(B_rnd), NONCE_SIZE]
 .add('OP_NUMEQUAL')                            # Stack [A_rnd, B_val]
 .add('OP_SWAP')                                # Stack [B_val, A_rnd]
 .add('OP_SIZE')                                # Stack [B_val, A_rnd, SIZE(A_rnd)]
 .add('OP_NIP')                                 # Stack [B_val, SIZE(A_rnd)]
-.add(new Buffer([NONCE_SIZE]))                 # Stack [B_val, SIZE(A_rnd), NONCE_SIZE]
+.add(Buffer.from([ NONCE_SIZE ]))              # Stack [B_val, SIZE(A_rnd), NONCE_SIZE]
 .add('OP_NUMEQUAL')                            # Stack [B_val, A_val]
 .add('OP_NUMEQUAL')                            # Stack [B_val === A_val ? 1 : 0]
 .add('OP_IF')                                  # Stack []
