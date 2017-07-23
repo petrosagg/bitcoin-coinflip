@@ -1,6 +1,7 @@
 crypto = require 'crypto'
 
 _ = require 'lodash'
+rp = require 'request-promise'
 Big = require 'big.js'
 low = require 'lowdb'
 colors = require 'colors/safe'
@@ -10,7 +11,29 @@ bitcoin = require 'bitcoinjs-lib'
 
 NONCE_SIZE = 16
 
-state = low('state.json')
+if process.env.TESTNET?
+	console.log(colors.bold(colors.blue("""
+	***********************************
+	*                                 *
+	*   YOU ARE PLAYING IN TESTNET    *
+	*                                 *
+	***********************************
+	""")))
+	base = 'https://testnet.blockexplorer.com'
+	network = bitcoin.networks.testnet
+	state = low('state-testnet.json')
+else
+	base = 'https://blockexplorer.com'
+	network = bitcoin.networks.bitcoin
+	state = low('state.json')
+
+getUTXOs = (addr) ->
+	rp("#{base}/api/addr/#{addr}/utxo", json: true)
+	.then (utxos) ->
+		balance = 0
+		for {satoshis} in utxos
+			balance += satoshis
+		return { utxos, balance }
 
 state.defaults({
 	privateKey: null
@@ -26,10 +49,10 @@ initKeyPair = ->
 	privateKey = state.get('privateKey').value()
 	if privateKey is null
 		console.log('Creating new wallet..')
-		keyPair = bitcoin.ECPair.makeRandom()
+		keyPair = bitcoin.ECPair.makeRandom(network: network)
 		state.set('privateKey', keyPair.toWIF()).write()
 	else
-		keyPair = bitcoin.ECPair.fromWIF(privateKey)
+		keyPair = bitcoin.ECPair.fromWIF(privateKey, network)
 		console.log('Loaded wallet from disk')
 
 	address = keyPair.getAddress()
@@ -59,6 +82,7 @@ createGame = ->
 			name: 'amount'
 			message: 'How much will you bet? (BTC)'
 			filter: Big
+			default: Big(balance).div(1e8)
 			validate: (btc) ->
 				sha = Number(btc.mul(1e8))
 				if sha <= 0
@@ -102,12 +126,9 @@ createGame = ->
 				catch
 					return 'Invalid bitcoin address'
 
-				blockexplorer.getUnspentOutputs(addr)
-				.get('unspent_outputs')
-				.then (utxos) ->
-					for {value} in utxos
-						opponentBalance += value
-
+				getUTXOs(addr)
+				.then ({balance}) ->
+					opponentBalance = balance
 					return true
 		},
 		{
@@ -144,22 +165,6 @@ createGame = ->
 		state.get('games').push(game).write()
 		return game
 
-checkBalance = ->
-	console.log('Checking available UTXOs..')
-
-	blockexplorer.getUnspentOutputs(address, confirmations: 1)
-	.get('unspent_outputs')
-	.then (result) ->
-		utxos = result
-		for {value} in utxos
-			balance += value
-	.catch (e) ->
-		if e is 'No free outputs to spend'
-			console.log(colors.red("You don't have any funds to play with. Send some funds and try again later"))
-		else
-			console.log('Unexpected error:', e)
-		throw e
-
 chooseGame = ->
 	games = state.get('games').value()
 
@@ -194,22 +199,35 @@ chooseGame = ->
 		else
 			throw new Error()
 
-finalizeGame = (game) ->
+finalizeGame = (game, ourUTXOs, opponentUTXOs) ->
 	p2shAddress = createCoinflipScript(address, game.opponent.address, game.commit, game.opponent.commit)
 
 	# deterministically decide who will generate the tx and who will wait
 	shouldCreateTx = game.commit < game.opponent.commit
 
 	if shouldCreateTx
-		tx = new bitcoin.TransactionBuilder()
-		tx.addInput(utxos[0], 0)
-		tx.addOutput(p2shAddress, game.amount + game.opponent.amount)
-		# XXX: add change
-		txb.sign(0, keyPair)
+		txb = new bitcoin.TransactionBuilder()
+
+		while something < game.amount
+			txb.addInput(utxos[0], 0)
+		while something < game.opponent.amount
+			txb.addInput(opponent.utxos[0], 0)
+
+		txb.addOutput(p2shAddress, game.amount + game.opponent.amount)
+		if something > 0
+			txb.addOutput(address, total1 - game.amount)
+		if something > 0
+			txb.addOutput(game.opponent.address, total2 - game.opponent.amount)
+
+		# sign our inputs
+		for {hash, index} in txb.inputs when ourUTXOs[hash]?
+			txb.sign(index, keyPair)
+
+		console.log(txb.build().toHex())
 	else # wait for signed tx
 		inquirer.prompt(
 			name: 'input'
-			message: "Enter #{game.opponent.name}'s signed input"
+			message: "Enter #{game.opponent.name}'s signed transaction"
 		)
 		.then ({input}) ->
 			console.log(input)
@@ -218,9 +236,13 @@ main = ->
 	console.log(colors.bold('- Welcome to bitcoin coinflip!'))
 	initKeyPair()
 
-	checkBalance()
+	getUTXOs(address)
+	.then (info) ->
+		utxos = info.utxos
+		balance = info.balance
 	.then(chooseGame)
-	.catch ->
+	.catch (e) ->
+		console.log(e)
 		console.log('Goodbye')
 		process.exit()
 

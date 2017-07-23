@@ -17,6 +17,8 @@
     "colors": "^1.1.2",
     "inquirer": "^3.2.0",
     "lodash": "^4.17.4",
-    "lowdb": "^0.16.2"
+    "lowdb": "^0.16.2",
+    "request": "^2.81.0",
+    "request-promise": "^4.2.1"
   }
 }
