@@ -17,35 +17,34 @@ bobRandom = crypto.Random.getRandomBuffer(NONCE_SIZE + bobValue)
 
 # The comments bellow follow the stack contents as the Bitcoin Script executes
 
-redeemScript = Script()
-.add('OP_2DUP')                                # Stack [A_rnd, B_rnd, A_rnd, B_rnd]
-.add('OP_HASH160')                             # Stack [A_rnd, B_rnd, A_rnd, HASH160(B_rnd)]
-.add(crypto.Hash.sha256ripemd160(bobRandom))   # Stack [A_rnd, B_rnd, A_rnd, HASH160(B_rnd), HASH160(B_rnd)]
-.add('OP_EQUALVERIFY')                         # Stack [A_rnd, B_rnd, A_rnd]
-.add('OP_HASH160')                             # Stack [A_rnd, B_rnd, HASH160(A_rnd)]
-.add(crypto.Hash.sha256ripemd160(aliceRandom)) # Stack [A_rnd, B_rnd, HASH160(A_rnd), HASH160(A_rnd)]
-.add('OP_EQUALVERIFY')                         # Stack [A_rnd, B_rnd]
-.add('OP_SIZE')                                # Stack [A_rnd, B_rnd, SIZE(B_rnd)]
-.add('OP_NIP')                                 # Stack [A_rnd, SIZE(B_rnd)]
-.add(Buffer.from([ NONCE_SIZE ]))              # Stack [A_rnd, SIZE(B_rnd), NONCE_SIZE]
-.add('OP_NUMEQUAL')                            # Stack [A_rnd, B_val]
-.add('OP_SWAP')                                # Stack [B_val, A_rnd]
-.add('OP_SIZE')                                # Stack [B_val, A_rnd, SIZE(A_rnd)]
-.add('OP_NIP')                                 # Stack [B_val, SIZE(A_rnd)]
-.add(Buffer.from([ NONCE_SIZE ]))              # Stack [B_val, SIZE(A_rnd), NONCE_SIZE]
-.add('OP_NUMEQUAL')                            # Stack [B_val, A_val]
-.add('OP_NUMEQUAL')                            # Stack [B_val === A_val ? 1 : 0]
-.add('OP_IF')                                  # Stack []
-.add(aliceKeyPair.toPublicKey().toBuffer())    # Stack [A_pub]
-.add('OP_ELSE')                                # Stack []
-.add(bobKeyPair.toPublicKey().toBuffer())      # Stack [B_pub]
-.add('OP_ENDIF')                               # Stack []
-.add('OP_CHECKSIG')                            # Stack []
+redeemScript = Script()                        # [aliceSig, A_rnd, B_rnd]
+.add('OP_2DUP')                                # [aliceSig, A_rnd, B_rnd, A_rnd, B_rnd]
+.add('OP_HASH160')                             # [aliceSig, A_rnd, B_rnd, A_rnd, HASH160(B_rnd)]
+.add(crypto.Hash.sha256ripemd160(bobRandom))   # [aliceSig, A_rnd, B_rnd, A_rnd, HASH160(B_rnd), HASH160(B_rnd)]
+.add('OP_EQUALVERIFY')                         # [aliceSig, A_rnd, B_rnd, A_rnd]
+.add('OP_HASH160')                             # [aliceSig, A_rnd, B_rnd, HASH160(A_rnd)]
+.add(crypto.Hash.sha256ripemd160(aliceRandom)) # [aliceSig, A_rnd, B_rnd, HASH160(A_rnd), HASH160(A_rnd)]
+.add('OP_EQUALVERIFY')                         # [aliceSig, A_rnd, B_rnd]
+.add('OP_SIZE')                                # [aliceSig, A_rnd, B_rnd, SIZE(B_rnd)]
+.add('OP_NIP')                                 # [aliceSig, A_rnd, SIZE(B_rnd)]
+.add(Buffer.from([ NONCE_SIZE ]))              # [aliceSig, A_rnd, SIZE(B_rnd), NONCE_SIZE]
+.add('OP_NUMEQUAL')                            # [aliceSig, A_rnd, B_val]
+.add('OP_SWAP')                                # [aliceSig, B_val, A_rnd]
+.add('OP_SIZE')                                # [aliceSig, B_val, A_rnd, SIZE(A_rnd)]
+.add('OP_NIP')                                 # [aliceSig, B_val, SIZE(A_rnd)]
+.add(Buffer.from([ NONCE_SIZE ]))              # [aliceSig, B_val, SIZE(A_rnd), NONCE_SIZE]
+.add('OP_NUMEQUAL')                            # [aliceSig, B_val, A_val]
+.add('OP_NUMEQUAL')                            # [aliceSig, B_val === A_val ? 1 : 0]
+.add('OP_IF')                                  # [aliceSig]
+.add(aliceKeyPair.toPublicKey().toBuffer())    # [aliceSig, A_pub]
+.add('OP_ELSE')
+.add(bobKeyPair.toPublicKey().toBuffer())      # [bobSig, B_pub]
+.add('OP_ENDIF')
+.add('OP_CHECKSIG')                            # [aliceSig, ]
 
 p2shScriptPub = Script.buildScriptHashOut(redeemScript)
 
 p2shAddress = p2shScriptPub.toAddress()
-
 
 # Assume a UTXO exists that sends 1BTC to the P2SH address calculated above.
 # When this runs in production, this UTXO will have inputs from Alice and Bob,
@@ -60,11 +59,13 @@ p2shUtxoWith1BTC = new Transaction.UnspentOutput(
 console.log('Alice')
 console.log('    Private Key:', aliceKeyPair.toWIF())
 console.log('          Value:', aliceValue)
-console.log('     Commitment:', aliceRandom.toString('hex'))
+console.log('         Buffer:', aliceRandom.toString('hex'))
+console.log('     Commitment:', crypto.Hash.sha256ripemd160(aliceRandom).toString('hex'))
 console.log('Bob')
 console.log('    Private Key:', bobKeyPair.toWIF())
 console.log('          Value:', bobValue)
-console.log('     Commitment:', bobRandom.toString('hex'))
+console.log('         Buffer:', bobRandom.toString('hex'))
+console.log('     Commitment:', crypto.Hash.sha256ripemd160(bobRandom).toString('hex'))
 console.log('')
 console.log('Funding address:', p2shAddress.toString())
 console.log('')
