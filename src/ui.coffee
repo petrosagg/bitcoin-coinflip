@@ -35,14 +35,28 @@ initKeyPair = ->
 	address = keyPair.getAddress()
 
 createGame = ->
+	game =
+		opponent:
+			name: 'Bob'
+			address: null
+			commit: null
+			amount: 0
+		state: 'new'
+		value: 0
+		commit: null
+		nonce: null
+		amount: 0
+
+	opponentBalance = 0
+
 	questions = [
 		{
-			name: 'opponent'
+			name: 'opponent.name'
 			message: 'Who are you playing with?'
-			default: 'Bob'
+			default: game.opponent.name
 		},
 		{
-			name: 'ourAmount'
+			name: 'amount'
 			message: 'How much will you bet? (BTC)'
 			filter: Big
 			validate: (btc) ->
@@ -51,51 +65,68 @@ createGame = ->
 					return 'The amount should be greater than zero'
 				if sha > balance
 					return "You don't have enough funds for this bet"
+
+				game.amount = sha
 				return true
 		},
 		{
-			name: 'theirAmount'
-			message: ({opponent}) -> "How much will #{opponent} bet? (BTC)"
-			filter: Big
-			default: (ans) -> ans.ourAmount
-		},
-		{
 			type: 'list'
-			name: 'bet'
+			name: 'value'
 			message: 'Heads or Tails?'
 			choices: _.shuffle([ 'Heads', 'Tails' ])
 			filter: (side) ->
 				value = if side is 'Heads' then 0 else 1
 
-				buf = Buffer.alloc(NONCE_SIZE + value)
+				buf = Buffer.allocUnsafe(NONCE_SIZE + value)
 				crypto.randomFillSync(buf)
 
 				commit = bitcoin.crypto.hash160(buf).toString('hex')
-				console.log('Your commitment is:', commit)
 
-				return {
-					commit: commit
-					nonce: buf.toString('hex')
-					value: value
-				}
+				game.commit = commit
+				game.nonce = buf.toString('hex')
+				game.value = value
+
+				return value
 		},
 		{
-			name: 'theirAddress'
+			name: 'opponent.address'
 			message: (answers) ->
 				console.log('Your info:')
 				console.log('Address:', address)
-				console.log('Commitment:', answers.bet.commit)
-				return "What is #{answers.opponent}'s bitcoin address?"
+				console.log('Commitment:', game.commit)
+				return "What is #{answers.opponent.name}'s bitcoin address?"
 			validate: (addr) ->
 				try
 					bitcoin.address.fromBase58Check(addr)
 				catch
 					return 'Invalid bitcoin address'
+
+				blockexplorer.getUnspentOutputs(addr)
+				.get('unspent_outputs')
+				.then (utxos) ->
+					for {value} in utxos
+						opponentBalance += value
+
+					return true
+		},
+		{
+			name: 'opponent.amount'
+			message: ({opponent}) -> "How much will #{opponent.name} bet? (BTC)"
+			default: (ans) -> ans.amount
+			filter: Big
+			validate: (btc, ans) ->
+				sha = Number(btc.mul(1e8))
+				if sha <= 0
+					return 'The amount should be greater than zero'
+				if sha > opponentBalance
+					return "#{ans.opponent.name} doen't have enough funds for this bet"
+
+				game.opponent.amount = sha
 				return true
 		},
 		{
-			name: 'theirCommit'
-			message: ({opponent}) ->"What is #{opponent}'s commitment?"
+			name: 'opponent.commit'
+			message: ({opponent}) ->"What is #{opponent.name}'s commitment?"
 			validate: (commit) ->
 				buf = Buffer.from(commit, 'hex')
 				if buf.length isnt 20
@@ -104,11 +135,10 @@ createGame = ->
 		},
 	]
 	inquirer.prompt(questions)
-	.then (game) ->
-		game.state = 'new'
-		game.theirAmount = Number(game.theirAmount.mul(1e8))
-		game.outAmount = Number(game.ourAmount.mul(1e8))
-
+	.then (answers) ->
+		game.opponent.name = answers.opponent.name
+		game.opponent.commit = answers.opponent.commit
+		game.opponent.address = answers.opponent.address
 		console.log('Saving game state')
 		state.get('games').push(game).write()
 		return game
@@ -148,7 +178,7 @@ chooseGame = ->
 		if newGame
 			return createGame()
 		else if games.length > 0
-			gameChoices = _.keyBy(games, (g) -> "#{g.opponent} - #{g.amount}BTC")
+			gameChoices = _.keyBy(games, (g) -> "#{g.opponent.name} - #{Big(g.amount).div(1e8)}BTC")
 
 			questions = [
 				{
@@ -164,20 +194,21 @@ chooseGame = ->
 			throw new Error()
 
 finalizeGame = (game) ->
-	ourCommit = Buffer.from(game.bet.commit, 'hex')
-	theirCommit = Buffer.from(game.theirCommit, 'hex')
-
-	p2shAddress = createCoinflipScript(address, game.theirAddress, outCommit, theirCommit)
+	p2shAddress = createCoinflipScript(address, game.opponent.address, game.commit, game.opponent.commit)
 
 	# deterministically decide who will generate the tx and who will wait
-	shouldCreateTx = Boolean((game.ourCommit[0] ^ game.theirCommit[0]) & 1)
+	shouldCreateTx = game.commit < game.opponent.commit
 
 	if shouldCreateTx
-		sign
+		tx = new bitcoin.TransactionBuilder()
+		tx.addInput(utxos[0], 0)
+		tx.addOutput(p2shAddress, game.amount + game.opponent.amount)
+		# XXX: add change
+		txb.sign(0, keyPair)
 	else # wait for signed tx
 		inquirer.prompt(
 			name: 'input'
-			message: "Enter #{game.opponent}'s signed input"
+			message: "Enter #{game.opponent.name}'s signed input"
 		)
 		.then ({input}) ->
 			console.log(input)
