@@ -1,6 +1,7 @@
 crypto = require 'crypto'
 
 _ = require 'lodash'
+Big = require 'big.js'
 low = require 'lowdb'
 colors = require 'colors/safe'
 inquirer = require 'inquirer'
@@ -17,6 +18,7 @@ state.defaults({
 }).write()
 
 utxos = []
+balance = 0
 keyPair = null
 address = null
 
@@ -32,30 +34,30 @@ initKeyPair = ->
 
 	address = keyPair.getAddress()
 
-formatSatoshi = (satoshi) -> "#{satoshi} shatoshi (#{(satoshi / 1e9).toFixed(3)}BTC)"
-
 createGame = ->
-	console.log(utxos)
-	utxoChoices = _.keyBy(utxos, (tx) -> "#{formatSatoshi(tx.value)} from #{tx.tx_hash}")
-
 	questions = [
 		{
 			name: 'opponent'
-			message: 'Who are you playing against?'
+			message: 'Who are you playing with?'
 			default: 'Bob'
 		},
 		{
-			type: 'list'
-			name: 'ourInput'
-			message: 'How much will you bet?'
-			choices: Object.keys(utxoChoices)
-			filter: (choice) -> utxoChoices[choice]
+			name: 'ourAmount'
+			message: 'How much will you bet? (BTC)'
+			filter: Big
+			validate: (btc) ->
+				sha = Number(btc.mul(1e8))
+				if sha <= 0
+					return 'The amount should be greater than zero'
+				if sha > balance
+					return "You don't have enough funds for this bet"
+				return true
 		},
 		{
 			name: 'theirAmount'
-			message: ({opponent}) -> "How much satoshi will #{opponent} bet?"
-			filter: Number
-			default: (ans) -> ans.ourInput.value
+			message: ({opponent}) -> "How much will #{opponent} bet? (BTC)"
+			filter: Big
+			default: (ans) -> ans.ourAmount
 		},
 		{
 			type: 'list'
@@ -96,7 +98,7 @@ createGame = ->
 			message: ({opponent}) ->"What is #{opponent}'s commitment?"
 			validate: (commit) ->
 				buf = Buffer.from(commit, 'hex')
-				if buf.length isnt NONCE_SIZE and buf.length isnt NONCE_SIZE + 1
+				if buf.length isnt 20
 					return 'Invalid commitment'
 				return true
 		},
@@ -104,6 +106,9 @@ createGame = ->
 	inquirer.prompt(questions)
 	.then (game) ->
 		game.state = 'new'
+		game.theirAmount = Number(game.theirAmount.mul(1e8))
+		game.outAmount = Number(game.ourAmount.mul(1e8))
+
 		console.log('Saving game state')
 		state.get('games').push(game).write()
 		return game
@@ -115,10 +120,11 @@ checkBalance = ->
 	.get('unspent_outputs')
 	.then (result) ->
 		utxos = result
+		for {value} in utxos
+			balance += value
 	.catch (e) ->
 		if e is 'No free outputs to spend'
 			console.log(colors.red("You don't have any funds to play with. Send some funds and try again later"))
-			console.log(colors.cyan('~ Make sure you send the exact amount you want to bet with a single UTXO. Change is not supported ~'))
 		else
 			console.log('Unexpected error:', e)
 		throw e
