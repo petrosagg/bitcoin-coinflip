@@ -91,8 +91,9 @@ createGame = ->
 		{
 			name: 'opponent.address'
 			message: (answers) ->
-				console.log('Your info:')
+				console.log("Send this info to #{answers.opponent.name}:")
 				console.log('Address:', address)
+				console.log('Amount:', Big(game.amount).div(1e8).toString())
 				console.log('Commitment:', game.commit)
 				return "What is #{answers.opponent.name}'s bitcoin address?"
 			validate: (addr) ->
