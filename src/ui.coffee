@@ -64,6 +64,7 @@ initKeyPair = ->
 		console.log('Loaded wallet from disk')
 
 	address = keyPair.getAddress()
+	console.log('Your address is:', address)
 
 createGame = ->
 	game =
