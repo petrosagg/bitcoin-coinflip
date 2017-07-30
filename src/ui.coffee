@@ -7,6 +7,7 @@ low = require 'lowdb'
 colors = require 'colors/safe'
 inquirer = require 'inquirer'
 bitcoin = require 'bitcoinjs-lib'
+Promise = require 'bluebird'
 { blockexplorer } = require('blockchain.info')
 
 coinflip = require './coinflip'
@@ -209,30 +210,43 @@ chooseGame = ->
 			throw new Error()
 
 finalizeGame = (game, ourUTXOs, opponentUTXOs) ->
-	p2shAddress = coinflip.createP2SHAddr(game.commit, game.opponent.commit, address, game.opponent.address)
+	p2shAddress = coinflip.createP2SHAddr(game.commit, game.opponent.commit, address, game.opponent.address, network)
+	console.log('Will send to', p2shAddress)
 
 	# deterministically decide who will generate the tx and who will wait
-	shouldCreateTx = game.commit < game.opponent.commit
+	shouldCreateTx = game.commit > game.opponent.commit
 
 	if shouldCreateTx
-		txb = new bitcoin.TransactionBuilder()
+		txb = new bitcoin.TransactionBuilder(network)
 
-		while something < game.amount
-			txb.addInput(utxos[0], 0)
-		while something < game.opponent.amount
-			txb.addInput(opponent.utxos[0], 0)
+		ourSum = 0
+		for {txid, vout, satoshis} in ourUTXOs
+			if ourSum > game.amount
+				break
+			txb.addInput(txid, vout)
+			ourSum += satoshis
+
+		opponentSum = 0
+		for {txid, vout, satoshis} in opponentUTXOs
+			if opponentSum > game.amount
+				break
+			txb.addInput(txid, vout)
+			opponentSum += satoshis
 
 		txb.addOutput(p2shAddress, game.amount + game.opponent.amount)
-		if something > 0
-			txb.addOutput(address, total1 - game.amount)
-		if something > 0
-			txb.addOutput(game.opponent.address, total2 - game.opponent.amount)
+
+		if ourSum > game.amount
+			txb.addOutput(address, ourSum - game.amount)
+
+		if opponentSum > game.opponent.amount
+			txb.addOutput(game.opponent.address, opponentSum - game.opponent.amount)
 
 		# sign our inputs
-		for {hash, index} in txb.inputs when ourUTXOs[hash]?
+		for {hash, index} in txb.inputs when _.find(ourUTXOs, txid: hash)?
 			txb.sign(index, keyPair)
 
-		console.log(txb.build().toHex())
+		tx = txb.buildIncomplete().toHex()
+		console.log(colors.green("Send this to #{game.opponent.name}:"), tx)
 	else # wait for signed tx
 		inquirer.prompt(
 			name: 'input'
@@ -250,7 +264,9 @@ main = ->
 		utxos = info.utxos
 		balance = info.balance
 	.then(chooseGame)
-	.then(finalizeGame)
+	.then (game) ->
+		Promise.all([ game, getUTXOs(address).get('utxos'), getUTXOs(game.opponent.address).get('utxos') ])
+	.spread(finalizeGame)
 	.catch (e) ->
 		console.log(e)
 		console.log('Goodbye')

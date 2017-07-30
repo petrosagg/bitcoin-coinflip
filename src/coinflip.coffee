@@ -63,9 +63,9 @@ exports.createRedeemPubScript = (aCommit, bCommit, aAddr, bAddr) ->
 
 	return bitcoin.script.fromASM(redeemScriptSource)
 
-exports.createP2SHAddr = (aCommit, bCommit, aAddr, bAddr) ->
+exports.createP2SHAddr = (aCommit, bCommit, aAddr, bAddr, network) ->
 	redeemScript = exports.createRedeemPubScript(aCommit, bCommit, aAddr, bAddr)
 
 	p2shScriptPub = bitcoin.script.scriptHash.output.encode(bitcoin.crypto.hash160(redeemScript))
 
-	return bitcoin.address.fromOutputScript(p2shScriptPub)
+	return bitcoin.address.fromOutputScript(p2shScriptPub, network)
