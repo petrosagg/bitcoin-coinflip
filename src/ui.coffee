@@ -11,6 +11,11 @@ bitcoin = require 'bitcoinjs-lib'
 
 NONCE_SIZE = 16
 
+statePath = 'state'
+
+if process.env.PLAYER
+	statePath += "-#{process.env.PLAYER}"
+
 if process.env.TESTNET?
 	console.log(colors.bold(colors.blue("""
 	***********************************
@@ -21,11 +26,12 @@ if process.env.TESTNET?
 	""")))
 	base = 'https://testnet.blockexplorer.com'
 	network = bitcoin.networks.testnet
-	state = low('state-testnet.json')
+	statePath += '-testnet'
 else
 	base = 'https://blockexplorer.com'
 	network = bitcoin.networks.bitcoin
-	state = low('state.json')
+
+state = low("#{statePath}.json")
 
 getUTXOs = (addr) ->
 	rp("#{base}/api/addr/#{addr}/utxo", json: true)
