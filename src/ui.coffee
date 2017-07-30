@@ -9,6 +9,8 @@ inquirer = require 'inquirer'
 bitcoin = require 'bitcoinjs-lib'
 { blockexplorer } = require('blockchain.info')
 
+coinflip = require './coinflip'
+
 NONCE_SIZE = 16
 
 statePath = 'state'
@@ -206,7 +208,7 @@ chooseGame = ->
 			throw new Error()
 
 finalizeGame = (game, ourUTXOs, opponentUTXOs) ->
-	p2shAddress = createCoinflipScript(address, game.opponent.address, game.commit, game.opponent.commit)
+	p2shAddress = coinflip.createP2SHAddr(game.commit, game.opponent.commit, address, game.opponent.address)
 
 	# deterministically decide who will generate the tx and who will wait
 	shouldCreateTx = game.commit < game.opponent.commit
@@ -247,6 +249,7 @@ main = ->
 		utxos = info.utxos
 		balance = info.balance
 	.then(chooseGame)
+	.then(finalizeGame)
 	.catch (e) ->
 		console.log(e)
 		console.log('Goodbye')
