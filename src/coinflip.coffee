@@ -24,49 +24,49 @@ exports.createRedeemPubScript = (aCommit, bCommit, aAddr, bAddr) ->
 	
 	# The comments bellow follow the stack contents as the Bitcoin Script executes
 
-	# redeemPub arguments: [ winnerSig, winnerPubKey, bNonce, aNonce ]
+	# redeemPub arguments: [ sig, pubKey, bNonce, aNonce ]
 	redeemScriptSource = [
 		# Duplicate the two nonces that should be at the top of the stack. This
 		# is because calculating their HASH160 consumes them and we need them
 		# again later
-		'OP_2DUP' # stack = [ winnerSig, winnerPubKey, bNonce, aNonce, bNonce, aNonce ]
+		'OP_2DUP' # stack = [ sig, pubKey, bNonce, aNonce, bNonce, aNonce ]
 
 		# Check Alice's nonce is the one she commited too
-		'OP_HASH160', aCommit, 'OP_EQUALVERIFY' # stack = [ winnerSig, winnerPubKey, bNonce, aNonce, bNonce ]
+		'OP_HASH160', aCommit, 'OP_EQUALVERIFY' # stack = [ sig, pubKey, bNonce, aNonce, bNonce ]
 
 		# Check Bob's commit
-		'OP_HASH160', bCommit, 'OP_EQUALVERIFY' # stack = [ winnerSig, winnerPubKey, bNonce, aNonce ]
+		'OP_HASH160', bCommit, 'OP_EQUALVERIFY' # stack = [ sig, pubKey, bNonce, aNonce ]
 
 		# Compute Alice's value
-		'OP_SIZE', 'OP_NIP', hex(NONCE_SIZE), 'OP_NUMEQUAL' # stack = [ winnerSig, winnerPubKey, bNonce, aValue ]
+		'OP_SIZE', 'OP_NIP', hex(NONCE_SIZE), 'OP_NUMEQUAL' # stack = [ sig, pubKey, bNonce, aValue ]
 
 		# Bring Bob's nonce at the top of the stack
-		'OP_SWAP' # stack = [ winnerSig, winnerPubKey, aValue, bNonce ]
+		'OP_SWAP' # stack = [ sig, pubKey, aValue, bNonce ]
 
 		# Compute Bob's value
-		'OP_SIZE', 'OP_NIP', hex(NONCE_SIZE), 'OP_NUMEQUAL' # stack = [ winnerSig, winnerPubKey, aValue, bValue]
+		'OP_SIZE', 'OP_NIP', hex(NONCE_SIZE), 'OP_NUMEQUAL' # stack = [ sig, pubKey, aValue, bValue]
 
 		# Alice wins if Bob had the same value
-		'OP_NUMEQUAL' # [ winnerSig, winnerPubKey, aliceWon ]
+		'OP_NUMEQUAL' # [ sig, pubKey, aliceWon ]
 
-		# Push winner's public key hash on the stack
+		# Push spender's public key hash on the stack
 		'OP_IF' # if aliceWon
-			addr2hash(aAddr) # stack = [ winnerSig, winnerPubKey, aPubKeyHash ]
+			addr2hash(aAddr) # stack = [ sig, pubKey, aPubKeyHash ]
 		'OP_ELSE'
-			addr2hash(bAddr) # stack = [ winnerSig, winnerPubKey, bPubKeyHash ]
+			addr2hash(bAddr) # stack = [ sig, pubKey, bPubKeyHash ]
 		'OP_ENDIF'
 
-		# Copy winner's pubkey at the top of the stack
-		'OP_OVER' # stack = [ winnerSig, winnerPubKey, a/bPubKeyHash, winnerPubKey ]
+		# Copy spender's pubkey at the top of the stack
+		'OP_OVER' # stack = [ sig, pubKey, winnerPubKeyHash, pubKey ]
 
 		# Compute its hash
-		'OP_HASH160' # stack = [ winnerSig, winnerPubKey, a/bPubKeyHash, winnerPubKeyHash ]
+		'OP_HASH160' # stack = [ sig, pubKey, winnerPubKeyHash, pubKeyHash ]
 
-		# Make sure it's equal to the actual winner
-		'OP_EQUALVERIFY' # stack = [ winnerSig, winnerPubKey ]
+		# Make sure it's equal to the winner's hash
+		'OP_EQUALVERIFY' # stack = [ sig, pubKey ]
 
 		# Verify signature
-		'OP_CHECKSIG'
+		'OP_CHECKSIG' # stack = [ ]
 	].join(' ')
 
 	return bitcoin.script.fromASM(redeemScriptSource)
