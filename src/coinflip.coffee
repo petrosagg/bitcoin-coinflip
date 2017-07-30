@@ -49,16 +49,24 @@ exports.createRedeemPubScript = (aCommit, bCommit, aAddr, bAddr) ->
 		# Alice wins if Bob had the same value
 		'OP_NUMEQUAL' # [ winnerSig, winnerPubKey, aliceWon ]
 
-		# Beginning of a standard pay-to-pubkey-hash
-		'OP_DUP', 'OP_HASH160',
-			# Push winner's public key hash on the stack
-			'OP_IF' # if aliceWon
-				addr2hash(aAddr) # stack = [ winnerSig, winnerPubKey, aPubKeyHash ]
-			'OP_ELSE'
-				addr2hash(bAddr) # stack = [ winnerSig, winnerPubKey, bPubKeyHash ]
-			'OP_ENDIF'
-		# Ending of a pay-to-pubkey-hash
-		'OP_EQUALVERIFY', 'OP_CHECKSIG'
+		# Push winner's public key hash on the stack
+		'OP_IF' # if aliceWon
+			addr2hash(aAddr) # stack = [ winnerSig, winnerPubKey, aPubKeyHash ]
+		'OP_ELSE'
+			addr2hash(bAddr) # stack = [ winnerSig, winnerPubKey, bPubKeyHash ]
+		'OP_ENDIF'
+
+		# Copy winner's pubkey at the top of the stack
+		'OP_OVER' # stack = [ winnerSig, winnerPubKey, a/bPubKeyHash, winnerPubKey ]
+
+		# Compute its hash
+		'OP_HASH160' # stack = [ winnerSig, winnerPubKey, a/bPubKeyHash, winnerPubKeyHash ]
+
+		# Make sure it's equal to the actual winner
+		'OP_EQUALVERIFY' # stack = [ winnerSig, winnerPubKey ]
+
+		# Verify signature
+		'OP_CHECKSIG'
 	].join(' ')
 
 	return bitcoin.script.fromASM(redeemScriptSource)
