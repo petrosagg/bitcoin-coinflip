@@ -13,7 +13,7 @@ coinflip = require './coinflip'
 
 NONCE_SIZE = 16
 
-statePath = 'state'
+statePath = '.state'
 
 if process.env.PLAYER
 	statePath += "-#{process.env.PLAYER}"
