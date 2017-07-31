@@ -242,8 +242,10 @@ finalizeGame = (game, ourUTXOs, opponentUTXOs) ->
 			txb.addOutput(game.opponent.address, opponentSum - game.opponent.amount)
 
 		# sign our inputs
-		for {hash, index} in txb.inputs when _.find(ourUTXOs, txid: hash)?
-			txb.sign(index, keyPair)
+		for { hash }, vin in txb.tx.ins
+			txHash = Buffer.from(hash).reverse().toString('hex')
+			if  _.find(ourUTXOs, txid: txHash)?
+				txb.sign(vin, keyPair)
 
 		tx = txb.buildIncomplete().toHex()
 		console.log(colors.green("Send this to #{game.opponent.name}:"), tx)
@@ -253,7 +255,17 @@ finalizeGame = (game, ourUTXOs, opponentUTXOs) ->
 			message: "Enter #{game.opponent.name}'s signed transaction"
 		)
 		.then ({input}) ->
-			console.log(input)
+			tx = bitcoin.Transaction.fromHex(input)
+			txb = bitcoin.TransactionBuilder.fromTransaction(tx, network)
+
+			# sign our inputs
+			for { hash }, vin in txb.tx.ins
+				txHash = Buffer.from(hash).reverse().toString('hex')
+				if  _.find(ourUTXOs, txid: txHash)?
+					txb.sign(vin, keyPair)
+
+			tx = txb.build().toHex()
+			console.log(colors.green("Transaction ready:"), tx)
 		
 main = ->
 	console.log(colors.bold('- Welcome to bitcoin coinflip!'))
