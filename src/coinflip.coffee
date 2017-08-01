@@ -25,7 +25,7 @@ exports.createRedeemPubScript = (aCommit, bCommit, aAddr, bAddr) ->
 	# The comments bellow follow the stack contents as the Bitcoin Script executes
 
 	# redeemPub arguments: [ sig, pubKey, bNonce, aNonce ]
-	redeemScriptSource = [
+	redeemPubScriptSource = [
 		# Duplicate the two nonces that should be at the top of the stack. This
 		# is because calculating their HASH160 consumes them and we need them
 		# again later
@@ -69,7 +69,7 @@ exports.createRedeemPubScript = (aCommit, bCommit, aAddr, bAddr) ->
 		'OP_CHECKSIG' # stack = [ ]
 	].join(' ')
 
-	return bitcoin.script.fromASM(redeemScriptSource)
+	return bitcoin.script.fromASM(redeemPubScriptSource)
 
 exports.createP2SHAddr = (aCommit, bCommit, aAddr, bAddr, network) ->
 	redeemScript = exports.createRedeemPubScript(aCommit, bCommit, aAddr, bAddr)
