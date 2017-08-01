@@ -1,6 +1,6 @@
 bitcoin = require 'bitcoinjs-lib'
 crypto = require 'crypto'
-{ crypto: Signature, Script, Transaction, PrivateKey } = require 'bitcore-lib'
+{ Script, Transaction } = require 'bitcore-lib'
 
 coinflip = require './coinflip'
 
@@ -53,45 +53,24 @@ console.log('')
 console.log('Funding address:', p2shAddress)
 console.log('')
 
-# Assume a UTXO exists that sends 1BTC to the P2SH address calculated above.
-# When this runs in production, this UTXO will have inputs from Alice and Bob,
-# which is how they place their bets.
-p2shUtxoWith1BTC = new Transaction.UnspentOutput(
-	txId: 'a477af6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458'
-	outputIndex: 0
-	script: Script.fromBuffer(p2shPubScript)
-	satoshis: 1e8
-)
-
 # Calculate who won
 if aValue is bValue
 	console.log('Alice wins')
-	winnerKeyPair = PrivateKey.fromWIF(aKeyPair.toWIF())
+	winnerKeyPair = aKeyPair
 else
 	console.log('Bob wins')
-	winnerKeyPair = PrivateKey.fromWIF(bKeyPair.toWIF())
+	winnerKeyPair = bKeyPair
 
 # Now let's create a transaction that tries to spend the bet
-tx = new Transaction()
-.from(p2shUtxoWith1BTC)
-.to(winnerKeyPair.toAddress(), 1e8)
+txb = new bitcoin.TransactionBuilder()
+txb.addInput('a477af6b2667c29670467e4e0728b685ee07b240235771862318e29ddbe58458', 0)
+txb.addOutput(winnerKeyPair.getAddress().toString(), 1e8)
+tx = txb.buildIncomplete()
 
-# Sign the transaction with Alice's private key
-sigtype = Signature.SIGHASH_ALL
-signature = Transaction.Sighash.sign(tx, winnerKeyPair, sigtype, 0, Script.fromBuffer(redeemPubScript))
-signatureBuffer = Buffer.concat([ signature.toDER(), Buffer.from([ sigtype ]) ])
-
-# Construct the sigScript containing the serialised redeemScript, the two
-# random inputs and Alice's signature
-p2shScriptSig = Script()
-.add(signatureBuffer)
-.add(winnerKeyPair.toPublicKey().toBuffer())
-.add(Buffer.from(bNonce, 'hex'))
-.add(Buffer.from(aNonce, 'hex'))
-.add(redeemPubScript)
+coinflip.sign(tx, 0, winnerKeyPair, aNonce, bNonce, aKeyPair.getAddress(), bKeyPair.getAddress())
 
 interpreter = Script.Interpreter()
 flags = Script.Interpreter.SCRIPT_VERIFY_P2SH
-verified = interpreter.verify(p2shScriptSig, Script.fromBuffer(p2shPubScript), tx, 0, flags)
+verified = interpreter.verify(Script.fromBuffer(tx.ins[0].script), Script.fromBuffer(p2shPubScript), Transaction(tx.toHex()), 0, flags)
 
 console.log('Verifying spending transaction:', verified, interpreter.errstr)

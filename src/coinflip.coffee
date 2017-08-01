@@ -9,14 +9,26 @@ nonce2commit = (nonce) -> bitcoin.crypto.hash160(Buffer.from(nonce, 'hex')).toSt
 
 addr2hash = (addr) -> bitcoin.address.fromBase58Check(addr).hash.toString('hex')
 
-exports.createRedeemSigScript = (aNonce, bNonce, keyPair) ->
-	# Use the same argumnent order as the pub script
-	if nonce2commit(bNonce) < nonce2commit(aNonce)
-		[ aNonce, bNonce ] = [ bNonce, aNonce ]
-	
-	throw new Error('Unimplemented')
+exports.sign = (tx, vin, keyPair, aNonce, bNonce, aAddr, bAddr) ->
+	redeemPubScript = createRedeemPubScript(nonce2commit(aNonce), nonce2commit(bNonce), aAddr, bAddr)
 
-exports.createRedeemPubScript = (aCommit, bCommit, aAddr, bAddr) ->
+	hashType = bitcoin.Transaction.SIGHASH_ALL
+
+	sighash = tx.hashForSignature(vin, redeemPubScript, hashType)
+
+	p2shSigScriptSource = [
+		keyPair.sign(sighash).toScriptSignature(hashType).toString('hex')
+		keyPair.getPublicKeyBuffer().toString('hex')
+		bNonce
+		aNonce
+		redeemPubScript.toString('hex')
+	].join(' ')
+
+	p2shSigScript = bitcoin.script.fromASM(p2shSigScriptSource)
+
+	tx.setInputScript(vin, p2shSigScript)
+
+exports.createRedeemPubScript = createRedeemPubScript = (aCommit, bCommit, aAddr, bAddr) ->
 	# This ensure both parties end up calculating the same script
 	if bCommit < aCommit
 		[ aCommit, bCommit ] = [ bCommit, aCommit ]
