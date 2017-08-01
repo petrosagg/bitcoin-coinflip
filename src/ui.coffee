@@ -250,9 +250,9 @@ finalizeGame = (game, ourUTXOs, opponentUTXOs) ->
 			txb.addOutput(game.opponent.address, opponentSum - game.opponent.amount - opponentFees)
 
 		# sign our inputs
-		for { hash }, vin in txb.tx.ins
+		for { hash, index }, vin in txb.tx.ins
 			txHash = Buffer.from(hash).reverse().toString('hex')
-			if  _.find(ourUTXOs, txid: txHash)?
+			if  _.find(ourUTXOs, txid: txHash, vout: index)?
 				txb.sign(vin, keyPair)
 
 		tx = txb.buildIncomplete().toHex()
@@ -267,9 +267,9 @@ finalizeGame = (game, ourUTXOs, opponentUTXOs) ->
 			txb = bitcoin.TransactionBuilder.fromTransaction(tx, network)
 
 			# sign our inputs
-			for { hash }, vin in txb.tx.ins
+			for { hash, index }, vin in txb.tx.ins
 				txHash = Buffer.from(hash).reverse().toString('hex')
-				if  _.find(ourUTXOs, txid: txHash)?
+				if  _.find(ourUTXOs, txid: txHash, vout: index)?
 					txb.sign(vin, keyPair)
 
 			tx = txb.build().toHex()
