@@ -14,6 +14,10 @@ coinflip = require './coinflip'
 
 NONCE_SIZE = 16
 
+SATOSHIS_PER_BYTE = 260
+P2PKH_SCRIPT_SIZE = 73 + 34; # sigsize (1 + 72) + pubkey (1 + 33)
+OUTPUT_SIZE = 80; # this is just an estimate
+
 statePath = '.state'
 
 if process.env.PLAYER
@@ -219,27 +223,31 @@ finalizeGame = (game, ourUTXOs, opponentUTXOs) ->
 	if shouldCreateTx
 		txb = new bitcoin.TransactionBuilder(network)
 
+		ourFees = 1.5 * SATOSHIS_PER_BYTE * OUTPUT_SIZE
 		ourSum = 0
 		for {txid, vout, satoshis} in ourUTXOs
-			if ourSum > game.amount
+			if ourSum >= game.amount + ourFees
 				break
 			txb.addInput(txid, vout)
 			ourSum += satoshis
+			ourFees += SATOSHIS_PER_BYTE * P2PKH_SCRIPT_SIZE
 
+		opponentFees = 1.5 * SATOSHIS_PER_BYTE * OUTPUT_SIZE
 		opponentSum = 0
 		for {txid, vout, satoshis} in opponentUTXOs
-			if opponentSum > game.amount
+			if opponentSum >= game.opponent.amount + opponentFees
 				break
 			txb.addInput(txid, vout)
 			opponentSum += satoshis
+			opponentFees += SATOSHIS_PER_BYTE * P2PKH_SCRIPT_SIZE
 
 		txb.addOutput(p2shAddress, game.amount + game.opponent.amount)
 
-		if ourSum > game.amount
-			txb.addOutput(address, ourSum - game.amount)
+		if ourSum > game.amount + ourFees
+			txb.addOutput(address, ourSum - game.amount - ourFees)
 
-		if opponentSum > game.opponent.amount
-			txb.addOutput(game.opponent.address, opponentSum - game.opponent.amount)
+		if opponentSum > game.opponent.amount + opponentFees
+			txb.addOutput(game.opponent.address, opponentSum - game.opponent.amount - opponentFees)
 
 		# sign our inputs
 		for { hash }, vin in txb.tx.ins
